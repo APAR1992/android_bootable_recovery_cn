@@ -40,17 +40,8 @@
 
 #include "minui.h"
 
-#if defined(RECOVERY_BGRA)
 #define PIXEL_FORMAT GGL_PIXEL_FORMAT_BGRA_8888
 #define PIXEL_SIZE   4
-#elif defined(RECOVERY_RGBX)
-#define PIXEL_FORMAT GGL_PIXEL_FORMAT_RGBX_8888
-#define PIXEL_SIZE   4
-#else
-#define PIXEL_FORMAT GGL_PIXEL_FORMAT_RGB_565
-#define PIXEL_SIZE   2
-#endif
-
 #define NUM_BUFFERS 2
 
 typedef struct {
@@ -66,7 +57,6 @@ static GGLSurface gr_font_texture;
 static GGLSurface gr_framebuffer[NUM_BUFFERS];
 static GGLSurface gr_mem_surface;
 static unsigned gr_active_fb = 0;
-static unsigned double_buffering = 0;
 static int overscan_percent = OVERSCAN_PERCENT;
 static int overscan_offset_x = 0;
 static int overscan_offset_y = 0;
@@ -159,8 +149,6 @@ static int get_framebuffer(GGLSurface *fb)
     if (vi.yres * fi.line_length * 2 > fi.smem_len)
         return fd;
 
-    double_buffering = 1;
-
     fb->version = sizeof(*fb);
     fb->width = vi.xres;
     fb->height = vi.yres;
@@ -183,8 +171,8 @@ static void get_memory_surface(GGLSurface* ms) {
 
 static void set_active_framebuffer(unsigned n)
 {
-    if (n > 1 || !double_buffering) return;
-    vi.yres_virtual = vi.yres * NUM_BUFFERS;
+    if (n > 1) return;
+    vi.yres_virtual = vi.yres * PIXEL_SIZE;
     vi.yoffset = n * vi.yres;
     vi.bits_per_pixel = PIXEL_SIZE * 8;
     if (ioctl(gr_fb_fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
@@ -197,8 +185,7 @@ void gr_flip(void)
     GGLContext *gl = gr_context;
 
     /* swap front and back buffers */
-    if (double_buffering)
-        gr_active_fb = (gr_active_fb + 1) & 1;
+    gr_active_fb = (gr_active_fb + 1) & 1;
 
     /* copy data from the in-memory surface to the buffer we're about
      * to make active. */
@@ -210,7 +197,7 @@ void gr_flip(void)
 }
 
 void gr_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
-{   
+{
     GGLContext *gl = gr_context;
     GGLint color[4];
     color[0] = ((r << 8) | r) + 1;
